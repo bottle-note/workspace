@@ -1,0 +1,231 @@
+name: Setup Repository Labels
+
+on:
+  workflow_dispatch: # Manual trigger for one-time setup
+
+jobs:
+  setup-labels:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Labels
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Define standardized labels
+            // Maximum 2 emojis used: 🔥 (critical) and 🐛 (bug)
+            const standardLabels = [
+              // Priority labels (using 🔥 emoji)
+              {
+                name: '🔥 priority: critical',
+                color: 'b60205',
+                description: '긴급하게 처리가 필요한 이슈'
+              },
+              {
+                name: 'priority: high',
+                color: 'd93f0b',
+                description: '높은 우선순위'
+              },
+              {
+                name: 'priority: medium',
+                color: 'fbca04',
+                description: '중간 우선순위'
+              },
+              {
+                name: 'priority: low',
+                color: '0e8a16',
+                description: '낮은 우선순위'
+              },
+
+              // Type labels (using 🐛 emoji for bug)
+              {
+                name: 'type: feature',
+                color: '0052cc',
+                description: '새로운 기능 요청'
+              },
+              {
+                name: '🐛 type: bug',
+                color: 'd73a4a',
+                description: '버그 리포트'
+              },
+              {
+                name: 'type: enhancement',
+                color: 'a2eeef',
+                description: '기존 기능 개선'
+              },
+              {
+                name: 'type: documentation',
+                color: '0075ca',
+                description: '문서 작업'
+              },
+              {
+                name: 'type: question',
+                color: 'd876e3',
+                description: '질문 또는 논의'
+              },
+              {
+                name: 'type: refactor',
+                color: 'fbca04',
+                description: '코드 리팩토링'
+              },
+              {
+                name: 'type: test',
+                color: '1d76db',
+                description: '테스트 관련'
+              },
+
+              // Status labels
+              {
+                name: 'status: in-progress',
+                color: 'fbca04',
+                description: '작업 진행 중'
+              },
+              {
+                name: 'status: review',
+                color: '0e8a16',
+                description: '리뷰 대기 중'
+              },
+              {
+                name: 'status: blocked',
+                color: 'd93f0b',
+                description: '차단됨'
+              },
+              {
+                name: 'status: on-hold',
+                color: 'ffffff',
+                description: '보류됨'
+              },
+              {
+                name: 'status: completed',
+                color: '0e8a16',
+                description: '완료됨'
+              },
+
+              // Area labels
+              {
+                name: 'area: backend',
+                color: '5319e7',
+                description: '백엔드 관련'
+              },
+              {
+                name: 'area: frontend',
+                color: 'c2e0c6',
+                description: '프론트엔드 관련'
+              },
+              {
+                name: 'area: database',
+                color: '006b75',
+                description: '데이터베이스 관련'
+              },
+              {
+                name: 'area: api',
+                color: 'f9d0c4',
+                description: 'API 관련'
+              },
+              {
+                name: 'area: infra',
+                color: 'bfd4f2',
+                description: '인프라 관련'
+              },
+
+              // Other labels
+              {
+                name: 'good first issue',
+                color: '7057ff',
+                description: '처음 기여하기 좋은 이슈'
+              },
+              {
+                name: 'help wanted',
+                color: '008672',
+                description: '도움이 필요한 이슈'
+              },
+              {
+                name: 'duplicate',
+                color: 'cfd3d7',
+                description: '중복된 이슈'
+              },
+              {
+                name: 'invalid',
+                color: 'e4e669',
+                description: '유효하지 않은 이슈'
+              },
+              {
+                name: 'wontfix',
+                color: 'ffffff',
+                description: '수정하지 않을 이슈'
+              }
+            ];
+
+            console.log('Starting label setup process...');
+
+            // Step 1: Get all existing labels
+            console.log('\n[Step 1] Fetching existing labels...');
+            let existingLabels = [];
+            try {
+              const response = await github.rest.issues.listLabelsForRepo({
+                owner,
+                repo,
+                per_page: 100
+              });
+              existingLabels = response.data;
+              console.log(`Found ${existingLabels.length} existing labels`);
+            } catch (error) {
+              const msg = error.message;
+              console.log(`Error fetching labels or no labels: ${msg}`);
+            }
+
+            // Step 2: Delete all existing labels
+            console.log('\n[Step 2] Deleting existing labels...');
+            for (const label of existingLabels) {
+              try {
+                await github.rest.issues.deleteLabel({
+                  owner,
+                  repo,
+                  name: label.name
+                });
+                console.log(`  ✓ Deleted: ${label.name}`);
+              } catch (error) {
+                const msg = error.message;
+                console.log(`  ✗ Failed to delete ${label.name}: ${msg}`);
+              }
+            }
+
+            // Step 3: Create new standardized labels
+            console.log('\n[Step 3] Creating standardized labels...');
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const label of standardLabels) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name: label.name,
+                  color: label.color,
+                  description: label.description
+                });
+                console.log(`  ✓ Created: ${label.name}`);
+                successCount++;
+              } catch (error) {
+                const msg = error.message;
+                console.log(`  ✗ Failed to create ${label.name}: ${msg}`);
+                failCount++;
+              }
+            }
+
+            // Step 4: Summary
+            console.log('\n[Summary]');
+            console.log(`  Deleted: ${existingLabels.length} labels`);
+            console.log(`  Created: ${successCount} labels`);
+            console.log(`  Failed: ${failCount} labels`);
+            console.log('\n✨ Label setup completed!');
