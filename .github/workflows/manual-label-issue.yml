@@ -30,9 +30,9 @@ env:
     - You MUST select labels ONLY from the provided available labels list
     - Do NOT create new label names or modify existing ones
     - Korean label names are valid and should be used exactly as provided
-    - Return ONLY a valid JSON array of label names
+    - Return a JSON object with a "labels" key containing an array of label names
 
-    Output format example: ["type: feature", "priority: high", "area: backend"]
+    Output format: {"labels": ["type: feature", "priority: high", "area: backend"]}
   USER_PROMPT_TEMPLATE: |
     ## Labeling Pattern Examples
 
@@ -59,7 +59,7 @@ env:
 
     Issue Body: {BODY}
 
-    Based on the patterns above, analyze the available labels, identify their groupings, and select appropriate labels for this issue. Return only a JSON array of label names.
+    Based on the patterns above, analyze the available labels, identify their groupings, and select appropriate labels for this issue. Return a JSON object with "labels" key.
 
 jobs:
   label-issue:
@@ -145,7 +145,8 @@ jobs:
                   content: process.env.USER_PROMPT
                 }
               ],
-              temperature: parseFloat(process.env.AI_TEMPERATURE)
+              temperature: parseFloat(process.env.AI_TEMPERATURE),
+              response_format: { type: "json_object" }
             });
 
             const response = await new Promise((resolve, reject) => {
@@ -176,9 +177,15 @@ jobs:
 
             console.log('API Response:', JSON.stringify(response, null, 2));
 
-            const selectedLabels = response.choices[0].message.content;
+            // Parse JSON object response
+            const content = response.choices[0].message.content;
+            const parsedContent = JSON.parse(content);
+            const selectedLabels = parsedContent.labels;
+
+            console.log('Selected Labels:', selectedLabels);
+
             core.setOutput('response', JSON.stringify(response));
-            core.setOutput('labels', selectedLabels);
+            core.setOutput('labels', JSON.stringify(selectedLabels));
 
             return selectedLabels;
 
