@@ -122,52 +122,70 @@ jobs:
 
       - name: Call GitHub Models API
         id: call-api
+        uses: actions/github-script@v7
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           USER_PROMPT: ${{ steps.prepare-prompt.outputs.prompt }}
-        run: |
-          RESPONSE=$(curl -s "https://models.github.ai/inference/chat/completions" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -d "{
-              \"model\": \"${{ env.AI_MODEL }}\",
-              \"messages\": [
+          SYSTEM_PROMPT: ${{ env.SYSTEM_PROMPT }}
+          AI_MODEL: ${{ env.AI_MODEL }}
+          AI_TEMPERATURE: ${{ env.AI_TEMPERATURE }}
+        with:
+          script: |
+            const https = require('https');
+
+            const payload = JSON.stringify({
+              model: process.env.AI_MODEL,
+              messages: [
                 {
-                  \"role\": \"system\",
-                  \"content\": \"${{ env.SYSTEM_PROMPT }}\"
+                  role: "system",
+                  content: process.env.SYSTEM_PROMPT
                 },
                 {
-                  \"role\": \"user\",
-                  \"content\": \"${USER_PROMPT}\"
+                  role: "user",
+                  content: process.env.USER_PROMPT
                 }
               ],
-              \"temperature\": ${{ env.AI_TEMPERATURE }}
-            }")
+              temperature: parseFloat(process.env.AI_TEMPERATURE)
+            });
 
-          echo "response<<EOF" >> $GITHUB_OUTPUT
-          echo "$RESPONSE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+            const response = await new Promise((resolve, reject) => {
+              const req = https.request({
+                hostname: 'models.github.ai',
+                path: '/inference/chat/completions',
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+                  'Content-Length': Buffer.byteLength(payload)
+                }
+              }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                  try {
+                    resolve(JSON.parse(data));
+                  } catch (e) {
+                    reject(new Error(`Failed to parse response: ${data}`));
+                  }
+                });
+              });
+              req.on('error', reject);
+              req.write(payload);
+              req.end();
+            });
 
-      - name: Parse API Response
-        id: parse-response
-        env:
-          RESPONSE: ${{ steps.call-api.outputs.response }}
-        run: |
-          echo "Full API Response:"
-          echo "$RESPONSE" | jq '.'
+            console.log('API Response:', JSON.stringify(response, null, 2));
 
-          # Extract the content from the response
-          SELECTED_LABELS=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
-          echo "Selected Labels: $SELECTED_LABELS"
+            const selectedLabels = response.choices[0].message.content;
+            core.setOutput('response', JSON.stringify(response));
+            core.setOutput('labels', selectedLabels);
 
-          # Save to output
-          echo "labels=$SELECTED_LABELS" >> $GITHUB_OUTPUT
+            return selectedLabels;
 
       - name: Apply Labels
         uses: actions/github-script@v7
         with:
           script: |
-            const selectedLabelsStr = '${{ steps.parse-response.outputs.labels }}';
+            const selectedLabelsStr = '${{ steps.call-api.outputs.labels }}';
             console.log('Raw output:', selectedLabelsStr);
 
             try {
