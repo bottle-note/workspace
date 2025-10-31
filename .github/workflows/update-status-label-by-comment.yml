@@ -1,0 +1,262 @@
+name: Update Status Label by Comment
+
+on:
+  issue_comment:
+    types: [ created ]
+
+env:
+  AI_MODEL: "gpt-4o"
+  AI_TEMPERATURE: "0.2"
+  SYSTEM_PROMPT: |
+    You are an expert at analyzing GitHub issue conversations to detect status changes.
+
+    ## Instructions
+    1. Analyze the provided list of available labels
+    2. Identify STATUS labels (typically with "status:" prefix or indicating progress states like 작업중, 완료, 배포, etc.)
+    3. Based on the conversation context, determine if a status change has occurred
+
+    ## Analysis Strategy
+    - Examine the entire conversation history for context
+    - Pay special attention to the latest comment
+    - Detect explicit status indicators (e.g., "started working", "completed", "deployed")
+    - Detect implicit status changes from context (e.g., "pushed to staging" implies deployment)
+    - If status is already final (completed/closed), avoid changes unless explicitly requested
+
+    ## Important Constraints
+    - Only select labels from the provided available labels list
+    - Return maximum 1 status label to add
+    - Korean label names (e.g., "status: 작업중") are valid
+    - Return a JSON object with "add" and "remove" arrays
+    - If no status change detected, return empty arrays
+
+    Output format: {"add": ["status: 작업중"], "remove": ["status: 계획"]}
+  USER_PROMPT_TEMPLATE: |
+    ## Status Change Pattern Examples
+
+    Example 1 - Work Started:
+    Previous status: "status: 계획"
+    Comment: "작업 시작하겠습니다"
+    Analysis: Clear indication of work starting
+    Result: {"add": ["status: 작업중"], "remove": ["status: 계획"]}
+
+    Example 2 - Deployment Complete:
+    Previous status: "status: 작업중"
+    Comment: "수정 완료했습니다. 스테이징 환경에 배포했어요"
+    Analysis: Deployment to staging detected
+    Result: {"add": ["status: 스테이징"], "remove": ["status: 작업중"]}
+
+    Example 3 - No Status Change:
+    Previous status: "status: 작업중"
+    Comment: "이 부분은 어떻게 구현하셨나요?"
+    Analysis: Just a question, no status change
+    Result: {"add": [], "remove": []}
+
+    ## Current Issue Analysis
+
+    Available Labels: {LABELS}
+    Current Labels: {CURRENT_LABELS}
+
+    Issue Title: {TITLE}
+    Issue Body: {BODY}
+
+    Latest Comment by @{COMMENT_AUTHOR}:
+    "{LATEST_COMMENT}"
+
+    Previous Comments:
+    {ALL_COMMENTS}
+
+    Based on the patterns above, determine if a status change should occur. Return a JSON object with "add" and "remove" arrays.
+
+jobs:
+  update-status:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Get Issue and Labels Info
+        id: get-info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Get all available labels
+            const allLabels = await github.rest.issues.listLabelsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            const labelList = allLabels.data.map(l => l.name).join(', ');
+
+            // Get current issue labels
+            const currentLabels = context.payload.issue.labels.map(l => l.name).join(', ');
+
+            // Get issue details
+            const title = context.payload.issue.title;
+            const body = context.payload.issue.body || '';
+
+            core.setOutput('labels', labelList);
+            core.setOutput('current_labels', currentLabels);
+            core.setOutput('title', title);
+            core.setOutput('body', body);
+
+            return { labels: labelList, currentLabels, title, body };
+
+      - name: Get All Comments
+        id: get-comments
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number
+            });
+
+            const allComments = comments.data.map(c => `[${c.user.login}]: ${c.body}`).join('\n---\n');
+            const latestComment = context.payload.comment.body;
+            const commentAuthor = context.payload.comment.user.login;
+
+            core.setOutput('all_comments', allComments);
+            core.setOutput('latest_comment', latestComment);
+            core.setOutput('comment_author', commentAuthor);
+
+            return { allComments, latestComment, commentAuthor };
+
+      - name: Prepare Prompt
+        id: prepare-prompt
+        uses: actions/github-script@v7
+        env:
+          LABELS: ${{ steps.get-info.outputs.labels }}
+          CURRENT_LABELS: ${{ steps.get-info.outputs.current_labels }}
+          TITLE: ${{ steps.get-info.outputs.title }}
+          BODY: ${{ steps.get-info.outputs.body }}
+          LATEST_COMMENT: ${{ steps.get-comments.outputs.latest_comment }}
+          COMMENT_AUTHOR: ${{ steps.get-comments.outputs.comment_author }}
+          ALL_COMMENTS: ${{ steps.get-comments.outputs.all_comments }}
+          TEMPLATE: ${{ env.USER_PROMPT_TEMPLATE }}
+        with:
+          script: |
+            const template = process.env.TEMPLATE;
+
+            const userPrompt = template
+              .replace(/{LABELS}/g, process.env.LABELS)
+              .replace(/{CURRENT_LABELS}/g, process.env.CURRENT_LABELS)
+              .replace(/{TITLE}/g, process.env.TITLE)
+              .replace(/{BODY}/g, process.env.BODY)
+              .replace(/{LATEST_COMMENT}/g, process.env.LATEST_COMMENT)
+              .replace(/{COMMENT_AUTHOR}/g, process.env.COMMENT_AUTHOR)
+              .replace(/{ALL_COMMENTS}/g, process.env.ALL_COMMENTS);
+
+            console.log('Prepared Prompt for Status Analysis');
+            core.setOutput('prompt', userPrompt);
+            return userPrompt;
+
+      - name: Call OpenAI API
+        id: call-api
+        uses: actions/github-script@v7
+        env:
+          USER_PROMPT: ${{ steps.prepare-prompt.outputs.prompt }}
+          SYSTEM_PROMPT: ${{ env.SYSTEM_PROMPT }}
+          AI_MODEL: ${{ env.AI_MODEL }}
+          AI_TEMPERATURE: ${{ env.AI_TEMPERATURE }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          script: |
+            const https = require('https');
+
+            const payload = JSON.stringify({
+              model: process.env.AI_MODEL,
+              messages: [
+                {
+                  role: "system",
+                  content: process.env.SYSTEM_PROMPT
+                },
+                {
+                  role: "user",
+                  content: process.env.USER_PROMPT
+                }
+              ],
+              temperature: parseFloat(process.env.AI_TEMPERATURE),
+              response_format: { type: "json_object" }
+            });
+
+            const response = await new Promise((resolve, reject) => {
+              const req = https.request({
+                hostname: 'api.openai.com',
+                path: '/v1/chat/completions',
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                  'Content-Length': Buffer.byteLength(payload)
+                }
+              }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                  try {
+                    resolve(JSON.parse(data));
+                  } catch (e) {
+                    reject(new Error(`Failed to parse response: ${data}`));
+                  }
+                });
+              });
+              req.on('error', reject);
+              req.write(payload);
+              req.end();
+            });
+
+            console.log('API Response:', JSON.stringify(response, null, 2));
+
+            const content = response.choices[0].message.content;
+            const result = JSON.parse(content);
+
+            console.log('Status Change Decision:', result);
+
+            core.setOutput('decision', JSON.stringify(result));
+            return result;
+
+      - name: Apply Label Changes
+        uses: actions/github-script@v7
+        env:
+          DECISION: ${{ steps.call-api.outputs.decision }}
+          CURRENT_LABELS: ${{ steps.get-info.outputs.current_labels }}
+        with:
+          script: |
+            const decision = JSON.parse(process.env.DECISION);
+            const currentLabelsArray = process.env.CURRENT_LABELS.split(', ').filter(l => l);
+
+            console.log('Applying label changes...');
+            console.log('Decision:', decision);
+
+            // Remove old status labels
+            if (decision.remove && decision.remove.length > 0) {
+              for (const label of decision.remove) {
+                if (currentLabelsArray.includes(label)) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: context.payload.issue.number,
+                      name: label
+                    });
+                    console.log(`❌ Removed: ${label}`);
+                  } catch (e) {
+                    console.log(`⚠️ Could not remove: ${label} - ${e.message}`);
+                  }
+                }
+              }
+            }
+
+            // Add new status labels
+            if (decision.add && decision.add.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                labels: decision.add
+              });
+              console.log(`✅ Added: ${decision.add.join(', ')}`);
+              console.log(`   Triggered by: @${context.payload.comment.user.login}`);
+            } else {
+              console.log('ℹ️ No status change detected');
+            }

@@ -1,0 +1,213 @@
+name: Auto Label Issues
+
+on:
+  issues:
+    types: [ opened ]
+
+permissions:
+  issues: write
+
+env:
+  AI_MODEL: "gpt-4o"
+  AI_TEMPERATURE: "0.3"
+  SYSTEM_PROMPT: |
+    You are an expert GitHub issue classifier. Your task is to analyze issues and assign appropriate labels.
+
+    ## Instructions
+    1. Analyze the provided list of available labels
+    2. Identify label groups (typically organized by prefixes like "type:", "priority:", "area:", "status:", etc.)
+    3. Select appropriate labels based on the issue content
+
+    ## Label Selection Strategy
+    - Examine label patterns and groupings in the available labels
+    - Choose labels from relevant groups (e.g., issue type, priority level, work area, status)
+    - You may select multiple labels from the same group when applicable (e.g., both frontend and backend for full-stack work)
+    - If a category is not clearly applicable, you may omit it
+
+    ## Important Constraints
+    - You MUST select labels ONLY from the provided available labels list
+    - Do NOT create new label names or modify existing ones
+    - Korean label names are valid and should be used exactly as provided
+    - Return a JSON object with a "labels" key containing an array of label names
+
+    Output format: {"labels": ["type: feature", "priority: high", "area: backend"]}
+  USER_PROMPT_TEMPLATE: |
+    ## Labeling Pattern Examples
+
+    Example 1 - Critical Bug:
+    Title: "사용자 로그인 실패 버그"
+    Body: "프로덕션 환경에서 로그인 시도 시 500 에러 발생"
+    Pattern: Selected bug-type label + critical priority + backend area
+
+    Example 2 - Full-Stack Feature:
+    Title: "대시보드 UI 개선 및 API 연동"
+    Body: "새로운 차트 컴포넌트 추가하고 백엔드 API와 연동 필요"
+    Pattern: Selected feature-type label + medium priority + both frontend and backend areas
+
+    Example 3 - Documentation Task:
+    Title: "README 업데이트"
+    Body: "설치 가이드 및 사용법 문서 작성"
+    Pattern: Selected documentation-type label + low priority (area omitted as not applicable)
+
+    ## Current Issue to Analyze
+
+    Available labels: {LABELS}
+
+    Issue Title: {TITLE}
+
+    Issue Body: {BODY}
+
+    Based on the patterns above, analyze the available labels, identify their groupings, and select appropriate labels for this issue. Return a JSON object with "labels" key.
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get Issue Details
+        id: get-issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.issue.title;
+            const body = context.payload.issue.body || '';
+
+            core.setOutput('title', title);
+            core.setOutput('body', body);
+
+            return { title, body };
+
+      - name: Get Available Labels
+        id: get-labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = await github.rest.issues.listLabelsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            const labelList = labels.data.map(l => l.name).join(', ');
+            core.setOutput('labels', labelList);
+            return labelList;
+
+      - name: Prepare User Prompt
+        id: prepare-prompt
+        uses: actions/github-script@v7
+        env:
+          LABELS: ${{ steps.get-labels.outputs.labels }}
+          TITLE: ${{ steps.get-issue.outputs.title }}
+          BODY: ${{ steps.get-issue.outputs.body }}
+          TEMPLATE: ${{ env.USER_PROMPT_TEMPLATE }}
+        with:
+          script: |
+            const template = process.env.TEMPLATE;
+            const labels = process.env.LABELS;
+            const title = process.env.TITLE;
+            const body = process.env.BODY;
+
+            const userPrompt = template
+              .replace(/{LABELS}/g, labels)
+              .replace(/{TITLE}/g, title)
+              .replace(/{BODY}/g, body);
+
+            console.log('Prepared User Prompt:');
+            console.log(userPrompt);
+
+            core.setOutput('prompt', userPrompt);
+            return userPrompt;
+
+      - name: Call OpenAI API
+        id: call-api
+        uses: actions/github-script@v7
+        env:
+          USER_PROMPT: ${{ steps.prepare-prompt.outputs.prompt }}
+          SYSTEM_PROMPT: ${{ env.SYSTEM_PROMPT }}
+          AI_MODEL: ${{ env.AI_MODEL }}
+          AI_TEMPERATURE: ${{ env.AI_TEMPERATURE }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          script: |
+            const https = require('https');
+
+            const payload = JSON.stringify({
+              model: process.env.AI_MODEL,
+              messages: [
+                {
+                  role: "system",
+                  content: process.env.SYSTEM_PROMPT
+                },
+                {
+                  role: "user",
+                  content: process.env.USER_PROMPT
+                }
+              ],
+              temperature: parseFloat(process.env.AI_TEMPERATURE),
+              response_format: { type: "json_object" }
+            });
+
+            const response = await new Promise((resolve, reject) => {
+              const req = https.request({
+                hostname: 'api.openai.com',
+                path: '/v1/chat/completions',
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                  'Content-Length': Buffer.byteLength(payload)
+                }
+              }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                  try {
+                    resolve(JSON.parse(data));
+                  } catch (e) {
+                    reject(new Error(`Failed to parse response: ${data}`));
+                  }
+                });
+              });
+              req.on('error', reject);
+              req.write(payload);
+              req.end();
+            });
+
+            console.log('API Response:', JSON.stringify(response, null, 2));
+
+            // Parse JSON object response
+            const content = response.choices[0].message.content;
+            const parsedContent = JSON.parse(content);
+            const selectedLabels = parsedContent.labels;
+
+            console.log('Selected Labels:', selectedLabels);
+
+            core.setOutput('response', JSON.stringify(response));
+            core.setOutput('labels', JSON.stringify(selectedLabels));
+
+            return selectedLabels;
+
+      - name: Apply Labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const selectedLabelsStr = '${{ steps.call-api.outputs.labels }}';
+            console.log('Raw output:', selectedLabelsStr);
+
+            try {
+              const selectedLabels = JSON.parse(selectedLabelsStr);
+              console.log('Parsed labels:', selectedLabels);
+
+              if (Array.isArray(selectedLabels) && selectedLabels.length > 0) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.issue.number,
+                  labels: selectedLabels
+                });
+                console.log('✅ Labels applied successfully:', selectedLabels);
+              } else {
+                console.log('⚠️ No labels selected or invalid format');
+              }
+            } catch (error) {
+              console.error('❌ Failed to parse or apply labels:', error);
+              console.error('Raw content:', selectedLabelsStr);
+            }
