@@ -120,7 +120,7 @@ jobs:
             core.setOutput('prompt', userPrompt);
             return userPrompt;
 
-      - name: Call GitHub Models API
+      - name: Call OpenAI API
         id: call-api
         uses: actions/github-script@v7
         env:
@@ -128,6 +128,7 @@ jobs:
           SYSTEM_PROMPT: ${{ env.SYSTEM_PROMPT }}
           AI_MODEL: ${{ env.AI_MODEL }}
           AI_TEMPERATURE: ${{ env.AI_TEMPERATURE }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         with:
           script: |
             const https = require('https');
@@ -149,12 +150,12 @@ jobs:
 
             const response = await new Promise((resolve, reject) => {
               const req = https.request({
-                hostname: 'models.github.ai',
-                path: '/inference/chat/completions',
+                hostname: 'api.openai.com',
+                path: '/v1/chat/completions',
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+                  'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
                   'Content-Length': Buffer.byteLength(payload)
                 }
               }, (res) => {
