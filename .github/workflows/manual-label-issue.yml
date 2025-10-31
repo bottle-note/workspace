@@ -93,28 +93,32 @@ jobs:
             });
             const labelList = labels.data.map(l => l.name).join(', ');
             core.setOutput('labels', labelList);
-            return labelList;
-
+            return labelList
       - name: Prepare User Prompt
         id: prepare-prompt
+        uses: actions/github-script@v7
         env:
           LABELS: ${{ steps.get-labels.outputs.labels }}
           TITLE: ${{ steps.get-issue.outputs.title }}
           BODY: ${{ steps.get-issue.outputs.body }}
-        run: |
-          # Replace template variables
-          USER_PROMPT=$(echo "${{ env.USER_PROMPT_TEMPLATE }}" | \
-            sed "s|{LABELS}|${LABELS}|g" | \
-            sed "s|{TITLE}|${TITLE}|g" | \
-            sed "s|{BODY}|${BODY}|g")
+          TEMPLATE: ${{ env.USER_PROMPT_TEMPLATE }}
+        with:
+          script: |
+            const template = process.env.TEMPLATE;
+            const labels = process.env.LABELS;
+            const title = process.env.TITLE;
+            const body = process.env.BODY;
 
-          echo "Prepared User Prompt:"
-          echo "$USER_PROMPT"
+            const userPrompt = template
+              .replace(/{LABELS}/g, labels)
+              .replace(/{TITLE}/g, title)
+              .replace(/{BODY}/g, body);
 
-          # Save to output (escape for JSON)
-          echo "prompt<<EOF" >> $GITHUB_OUTPUT
-          echo "$USER_PROMPT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+            console.log('Prepared User Prompt:');
+            console.log(userPrompt);
+
+            core.setOutput('prompt', userPrompt);
+            return userPrompt;
 
       - name: Call GitHub Models API
         id: call-api
