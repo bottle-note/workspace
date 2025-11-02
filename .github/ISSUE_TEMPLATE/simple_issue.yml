@@ -1,0 +1,31 @@
+name: 간단한 이슈
+description: 누가, 무엇을, 왜 형식의 간단한 이슈
+title: "[이슈]: "
+labels: []
+body:
+  - type: input
+    id: who
+    attributes:
+      label: 누가
+      description: 요청자 또는 영향받는 대상
+      placeholder: 예) 사용자, 개발팀, 관리자
+    validations:
+      required: true
+
+  - type: input
+    id: what
+    attributes:
+      label: 무엇을
+      description: 필요한 작업이나 문제
+      placeholder: 예) 로그인 기능 오류 수정
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: 왜
+      description: 이유나 배경
+      placeholder: 예) 사용자가 로그인할 수 없어서 서비스 이용 불가
+    validations:
+      required: true
