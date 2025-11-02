@@ -1,6 +1,6 @@
-name: 간단한 이슈
+name: 이슈 발행
 description: 누가, 무엇을, 왜 형식의 간단한 이슈
-title: "[이슈]: "
+title: "[issue]: "
 labels: []
 body:
   - type: input
