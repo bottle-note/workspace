@@ -17,26 +17,28 @@ env:
   AI_MODEL: "gpt-4o"
   AI_TEMPERATURE: "0.3"
   SYSTEM_PROMPT: |
-    You are an expert in analyzing and concisely summarizing GitHub issues.
+    You are a thoughtful analyst who summarizes GitHub issues in polite, professional Korean.
 
     ## Role
-    Analyze the issue written by the user (Who, What, Why) and summarize only the key points.
+    Analyze the issue written by the user (Who, What, Why) and provide a thoughtful summary.
     If images are included, analyze the image content as well.
 
     ## Writing Rules
     - MUST write in Korean language
-    - Maximum 5 lines
-    - Present only the core problem and solution direction
-    - Write in paragraph format without unnecessary sections or checklists
+    - Write 3-5 lines with proper line breaks between sentences
+    - Use polite, professional endings: ~습니다, ~됩니다
+    - Show thoughtful analysis: ~으로 보입니다, ~인 것 같습니다, ~으로 추측됩니다
+    - Use \n for line breaks between different points
+    - Don't be overly certain - use inferential expressions
 
     ## Output Format
-    JSON format:
+    JSON format with line breaks:
     {
-      "summary": "Concise Korean summary within 5 lines (반드시 한글로 작성)"
+      "summary": "First sentence입니다.\n두 번째 포인트입니다.\n세 번째 내용으로 보입니다."
     }
 
   USER_PROMPT_TEMPLATE: |
-    Please analyze the following issue and provide a concise summary within 5 lines.
+    Please analyze the following issue and provide a thoughtful summary in Korean.
 
     **Title**: {TITLE}
     **Who**: {WHO}
@@ -45,8 +47,14 @@ env:
 
     {IMAGE_NOTE}
 
-    Briefly summarize what the core problem is, what type of issue it is, and what the solution direction is.
-    IMPORTANT: Write the summary in Korean language within 5 lines.
+    Provide a professional summary that:
+    - Explains what was requested
+    - Infers the purpose or reason behind the request
+    - Suggests the likely solution approach
+
+    Write in polite Korean with ~습니다/~됩니다 endings.
+    Use inferential expressions like ~으로 보입니다, ~인 것 같습니다, ~으로 추측됩니다.
+    IMPORTANT: Use \n for line breaks between sentences (3-5 lines total).
 
 jobs:
   enhance-issue:
@@ -331,7 +339,7 @@ jobs:
             const aiSummary = process.env.AI_SUMMARY;
 
             // Construct new body with AI analysis
-            const newBody = `${originalBody}\n\n---\n\n## AI 분석\n\n${aiSummary}\n\n---\n*이 내용은 AI에 의해 자동으로 생성되었습니다.*`;
+            const newBody = `${originalBody}\n\n---\n\n*이 내용은 AI에 의해 자동으로 생성되었습니다.*\n\n${aiSummary}\n\n`;
 
             try {
               // Update the issue
@@ -349,33 +357,4 @@ jobs:
               console.error(`❌ Failed to update issue: ${error.message}`);
               core.setOutput('error', error.message);
               throw error;
-            }
-
-      - name: Add Notification Comment
-        if: steps.update-issue.outputs.updated == 'true'
-        uses: actions/github-script@v7
-        env:
-          ISSUE_NUMBER: ${{ steps.get-issue.outputs.number }}
-        with:
-          script: |
-            const issueNumber = parseInt(process.env.ISSUE_NUMBER);
-            const isManualTrigger = context.eventName === 'workflow_dispatch';
-
-            const message = isManualTrigger
-              ? '✅ AI가 이슈를 분석하여 요약을 추가했습니다. (수동 실행)'
-              : '✅ AI가 이슈를 분석하여 요약을 추가했습니다.';
-
-            try {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                body: message
-              });
-
-              console.log(`✓ Comment added to issue #${issueNumber}`);
-
-            } catch (error) {
-              console.error(`⚠️ Failed to add comment: ${error.message}`);
-              // Don't fail the workflow for comment errors
             }
