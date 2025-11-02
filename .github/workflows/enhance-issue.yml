@@ -38,19 +38,27 @@ env:
     }
 
   USER_PROMPT_TEMPLATE: |
-    Please analyze the following issue and provide a thoughtful summary in Korean.
+    Please analyze the following GitHub issue and provide a thoughtful summary in Korean.
 
-    **Title**: {TITLE}
-    **Who**: {WHO}
-    **What**: {WHAT}
-    **Why**: {WHY}
+    **Issue Title**: {TITLE}
+
+    **Full Issue Content**:
+    {FULL_BODY}
+
+    **Parsed Information (if available)**:
+    - Who: {WHO}
+    - What: {WHAT}
+    - Why: {WHY}
 
     {IMAGE_NOTE}
 
-    Provide a professional summary that:
-    - Explains what was requested
+    Based on the title, content, and any images, provide a professional summary that:
+    - Explains what was requested or what the problem is
     - Infers the purpose or reason behind the request
     - Suggests the likely solution approach
+
+    IMPORTANT: Focus on the actual issue content and images rather than just the parsed fields.
+    If Who/What/Why are "Not specified", analyze the full content and images instead.
 
     Write in polite Korean with ~습니다/~됩니다 endings.
     Use inferential expressions like ~으로 보입니다, ~인 것 같습니다, ~으로 추측됩니다.
@@ -192,6 +200,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           TITLE: ${{ steps.get-issue.outputs.title }}
+          FULL_BODY: ${{ steps.get-issue.outputs.body }}
           WHO: ${{ steps.extract-content.outputs.who }}
           WHAT: ${{ steps.extract-content.outputs.what }}
           WHY: ${{ steps.extract-content.outputs.why }}
@@ -202,6 +211,7 @@ jobs:
 
             // Get environment variables
             const title = process.env.TITLE;
+            const fullBody = process.env.FULL_BODY || '';
             const who = process.env.WHO || 'Not specified';
             const what = process.env.WHAT || 'Not specified';
             const why = process.env.WHY || 'Not specified';
@@ -215,6 +225,7 @@ jobs:
 
             const userPrompt = userPromptTemplate
               .replace('{TITLE}', title)
+              .replace('{FULL_BODY}', fullBody)
               .replace('{WHO}', who)
               .replace('{WHAT}', what)
               .replace('{WHY}', why)
