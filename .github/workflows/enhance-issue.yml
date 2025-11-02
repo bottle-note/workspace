@@ -103,9 +103,11 @@ jobs:
       - name: Check if Already Enhanced
         id: check-enhanced
         uses: actions/github-script@v7
+        env:
+          ISSUE_BODY: ${{ steps.get-issue.outputs.body }}
         with:
           script: |
-            const body = '${{ steps.get-issue.outputs.body }}';
+            const body = process.env.ISSUE_BODY || '';
 
             if (body.includes('## AI 분석')) {
               console.log('✓ Issue already enhanced with AI analysis');
@@ -121,9 +123,11 @@ jobs:
         id: extract-content
         if: steps.check-enhanced.outputs.skip != 'true'
         uses: actions/github-script@v7
+        env:
+          ISSUE_BODY: ${{ steps.get-issue.outputs.body }}
         with:
           script: |
-            const body = `${{ steps.get-issue.outputs.body }}`;
+            const body = process.env.ISSUE_BODY || '';
             const lines = body.split('\n');
 
             let who = '';
