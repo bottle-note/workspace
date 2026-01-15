@@ -1,8 +1,9 @@
 name: Enhance Issue with AI
 
 on:
-  issues:
-    types: [ opened ]
+  # 자동 실행 비활성화 - 수동 실행(workflow_dispatch)만 사용
+  # issues:
+  #   types: [ opened ]
   workflow_dispatch:
     inputs:
       issue_number:
