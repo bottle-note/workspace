@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="960" viewBox="0 0 1440 960">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#101010" flood-opacity="0.12"/></filter>
+    <style>
+      .title{font-family:Arial,'Noto Sans KR',sans-serif;font-size:42px;font-weight:800;fill:#101010}.sub{font-family:Arial,'Noto Sans KR',sans-serif;font-size:20px;fill:#666}.h{font-family:Arial,'Noto Sans KR',sans-serif;font-size:28px;font-weight:800;fill:#101010}.body{font-family:Arial,'Noto Sans KR',sans-serif;font-size:18px;fill:#252525}.small{font-family:Arial,'Noto Sans KR',sans-serif;font-size:15px;fill:#666}.token{font-family:Arial,'Noto Sans KR',sans-serif;font-size:14px;fill:#252525}.caption{font-family:Arial,'Noto Sans KR',sans-serif;font-size:16px;font-weight:700;fill:#E58257}.chip{font-family:Arial,'Noto Sans KR',sans-serif;font-size:15px;font-weight:700}.mono{font-family:Menlo,Consolas,monospace;font-size:15px;fill:#252525}
+    </style>
+  </defs>
+  <rect width="1440" height="960" fill="#fff9f6"/>
+  <text class="title" x="64" y="72">BottleNote Product Design System Artifact</text>
+  <text class="sub" x="66" y="106">Figma-importable SVG output generated from product FE source patterns; not a code/doc deliverable</text>
+
+  <g transform="translate(60 155)">
+    <text class="h" x="0" y="0">1. Design Tokens</text>
+    <rect x="0" y="28" width="600" height="255" rx="24" fill="#fff" stroke="#E6E6DD" filter="url(#shadow)"/>
+    <g transform="translate(35 62)">
+      <rect width="96" height="64" rx="12" fill="#EF9A6E"/><text class="token" y="92">mainCoral</text><text class="token" y="112">#EF9A6E</text>
+      <g transform="translate(132 0)"><rect width="96" height="64" rx="12" fill="#E58257"/><text class="token" y="92">subCoral</text><text class="token" y="112">#E58257</text></g>
+      <g transform="translate(264 0)"><rect width="96" height="64" rx="12" fill="#E6E6DD"/><text class="token" y="92">bgGray</text><text class="token" y="112">#E6E6DD</text></g>
+      <g transform="translate(396 0)"><rect width="96" height="64" rx="12" fill="#F7F7F7" stroke="#ddd"/><text class="token" y="92">sectionWhite</text><text class="token" y="112">#F7F7F7</text></g>
+    </g>
+    <text class="body" x="36" y="220">Type scale: text-10 / 13 / 15 / 20 / 24 / 27</text>
+    <text class="body" x="36" y="250">Mobile width: max-w-content 468px · safe-area · navbar/CTA spacing</text>
+  </g>
+
+  <g transform="translate(760 155)">
+    <text class="h" x="0" y="0">2. Product Card Component Set</text>
+    <rect x="0" y="28" width="600" height="255" rx="24" fill="#fff" stroke="#E6E6DD" filter="url(#shadow)"/>
+    <g transform="translate(35 62)">
+      <rect width="170" height="178" rx="16" fill="#F7F7F7" stroke="#E6E6DD"/><rect x="28" y="18" width="114" height="92" rx="12" fill="#fff" stroke="#E6E6DD"/><text class="body" x="18" y="134" font-weight="800">Home Card</text><text class="caption" x="18" y="160">145 image + rating</text>
+      <g transform="translate(215 8)"><rect width="305" height="88" rx="16" fill="#fff" stroke="#BFBFBF"/><rect x="16" y="14" width="62" height="62" rx="10" fill="#F7F7F7" stroke="#E6E6DD"/><text class="body" x="96" y="34" font-weight="800">ListItem / Explore</text><text class="small" x="96" y="58">name · category · rating · pick</text><text class="caption" x="96" y="78">★ 4.2  tag chips</text></g>
+      <g transform="translate(215 130)"><rect width="92" height="34" rx="8" fill="#fff" stroke="#E58257"/><text class="chip" x="20" y="23" fill="#E58257">default</text><rect x="112" width="104" height="34" rx="8" fill="#E58257"/><text class="chip" x="130" y="23" fill="#fff">selected</text></g>
+    </g>
+  </g>
+
+  <g transform="translate(60 520)">
+    <text class="h" x="0" y="0">3. Mobile Shell / Overlay / CTA</text>
+    <rect x="0" y="28" width="600" height="300" rx="24" fill="#fff" stroke="#E6E6DD" filter="url(#shadow)"/>
+    <g transform="translate(36 62)">
+      <rect width="205" height="230" rx="28" fill="#fff" stroke="#101010" stroke-width="3"/><rect x="22" y="163" width="161" height="54" rx="13" fill="#fff" stroke="#E58257"/><text class="caption" x="43" y="196">Bottom Nav 70px</text>
+      <g transform="translate(270 10)"><rect width="220" height="58" rx="14" fill="#E58257"/><text class="chip" x="62" y="37" fill="#fff">Primary CTA</text><rect y="92" width="104" height="52" rx="14" fill="#fff" stroke="#E58257"/><text class="chip" x="30" y="125" fill="#E58257">Cancel</text><rect x="116" y="92" width="104" height="52" rx="14" fill="#E58257"/><text class="chip" x="155" y="125" fill="#fff">OK</text><rect y="176" width="220" height="65" rx="24" fill="#fff" stroke="#BFBFBF"/><rect x="84" y="190" width="52" height="6" rx="3" fill="#BFBFBF"/><text class="body" x="54" y="225">BottomSheet</text></g>
+    </g>
+  </g>
+
+  <g transform="translate(760 520)">
+    <text class="h" x="0" y="0">4. Code to Figma Mapping</text>
+    <rect x="0" y="28" width="600" height="300" rx="24" fill="#fff" stroke="#E6E6DD" filter="url(#shadow)"/>
+    <text class="mono" x="35" y="75">AlcoholItem.tsx        → Product/WhiskyCard/home-card</text>
+    <text class="mono" x="35" y="108">ListItem.tsx           → Product/WhiskyCard/list-default</text>
+    <text class="mono" x="35" y="141">WhiskeyListItem.tsx    → Product/WhiskyCard/explore-list</text>
+    <text class="mono" x="35" y="174">Button.tsx             → Action/PrimaryCTA</text>
+    <text class="mono" x="35" y="207">Navbar.tsx             → Shell/BottomNavigation</text>
+    <text class="mono" x="35" y="240">BottomSheet/Modal.tsx  → Overlay/*</text>
+    <text class="mono" x="35" y="273">HomeCarousel.tsx       → Home/HeroBanner</text>
+  </g>
+
+  <text class="sub" x="64" y="900">Artifact formats: SVG for Figma import, PNG preview, Excalidraw board for editable planning.</text>
+</svg>
