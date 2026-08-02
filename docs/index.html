@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <title>보틀노트 API 문서</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+
+  <body>
+    <div id="app"></div>
+
+    <!-- 버전 고정: CDN latest가 깨지면 문서 전체가 죽으므로 명시적으로 올린다 -->
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.64.0"></script>
+
+    <script>
+      // apis.json은 워크플로가 스펙을 내려받을 때도 쓰는 단일 목록이다
+      fetch('./apis.json')
+        .then((res) => res.json())
+        .then((apis) => {
+          Scalar.createApiReference('#app', {
+            sources: apis.map((api, index) => ({
+              title: api.title,
+              slug: api.slug,
+              url: './' + api.file,
+              default: index === 0,
+            })),
+          })
+        })
+        .catch((error) => {
+          document.getElementById('app').textContent =
+            'API 문서 목록을 불러오지 못했습니다: ' + error.message
+        })
+    </script>
+  </body>
+</html>
