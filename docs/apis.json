@@ -9,6 +9,6 @@
     "title": "Admin API",
     "slug": "admin",
     "file": "openapi.admin.json",
-    "url": "https://api.development.bottle-note.com/api/v1/openapi.product.json"
+    "url": "https://admin-api.development.bottle-note.com/admin/api/v1/openapi.admin.json"
   }
 ]
