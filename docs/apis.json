@@ -1,0 +1,14 @@
+[
+  {
+    "title": "Product API",
+    "slug": "product",
+    "file": "openapi.product.json",
+    "url": "https://api.development.bottle-note.com/api/v1/openapi.product.json"
+  },
+  {
+    "title": "Admin API",
+    "slug": "admin",
+    "file": "openapi.admin.json",
+    "url": "https://api.development.bottle-note.com/api/v1/openapi.product.json"
+  }
+]

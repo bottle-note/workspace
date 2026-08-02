@@ -1,0 +1,71 @@
+name: Deploy API Docs
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 매일 03:00 KST (18:00 UTC) 스펙 재동기화
+    - cron: '0 18 * * *'
+  push:
+    branches: [ main ]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/deploy-api-docs.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 항상 최신 실행 하나만 유지
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build Site
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp docs/index.html docs/apis.json dist/
+
+          # CORS 때문에 브라우저가 API 서버를 직접 호출할 수 없어 빌드 시점에 스냅샷을 받는다
+          jq -c '.[]' docs/apis.json | while read -r api; do
+            file=$(echo "$api" | jq -r '.file')
+            url=$(echo "$api" | jq -r '.url')
+            echo "Fetching $url -> dist/$file"
+            curl --fail --silent --show-error --location "$url" -o "dist/$file"
+          done
+
+      - name: Validate OpenAPI Documents
+        run: |
+          set -euo pipefail
+          jq -r '.[].file' docs/apis.json | while read -r file; do
+            npx --yes @scalar/cli document validate "dist/$file"
+          done
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
