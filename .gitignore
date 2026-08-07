@@ -13,4 +13,19 @@
 /.idea/workspace.iml
 
 *.env
+.env
+.env.*
+!.env.example
 /.idea/
+
+# mcp local runtime / secrets (defense in depth)
+mcp/node_modules/
+mcp/dist/
+mcp/git.environment-variables/
+mcp/**/*.sops.yaml
+mcp/**/*.sops.env
+mcp/**/kubeconfig*
+**/*credentials*
+**/*secret*
+*.log
+.DS_Store
