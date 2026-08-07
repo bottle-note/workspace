@@ -8,34 +8,37 @@ Admin / Agent client (Claude, Codex, Cursor)
         |  Authorization: Bearer bn_agent_*
         v
  mcp  (this directory)
-        |  internal HTTP only (allowlisted paths)
-        |  Agent Key -> Admin JWT exchange (JWT never returned to client)
+        |  allowlisted HTTP only
+        |  Agent Key → Admin JWT (never returned)
         v
- bottlenote-admin-api  (existing APIs only)
-   POST /admin/api/v1/auth/agent
-   GET  /admin/api/v1/alcohols
-   GET  /admin/api/v1/alcohols/{id}
+ bottlenote-admin-api (existing APIs)
+   POST /auth/agent
+   GET  /alcohols
+   GET  /alcohols/{id}
 ```
 
+규범·페르소나 교차 검토: [`docs/PRINCIPLES.md`](./docs/PRINCIPLES.md)
 
 ## Prerequisites
 
 - Node.js 22+
-- Private env/config lives in `bottle-note/environment-variables` (not vendored here). Do not commit keys.
+- Secrets: private `environment-variables` / k8s Secret only. Never commit keys.
 
 ## Local run
 
 ```bash
 cp .env.example .env
-# set ADMIN_API_BASE_URL; optional BOTTLENOTE_AGENT_KEY for local smoke only
+# ADMIN_API_BASE_URL required for real calls
+# BOTTLENOTE_AGENT_KEY: local smoke only (forbidden when NODE_ENV=production)
 npm install
 npm run dev
 ```
 
-- Health: `GET http://localhost:3100/healthz`
-- MCP: `POST http://localhost:3100/mcp` with `Authorization: Bearer bn_agent_...`
+- Health: `GET /healthz`
+- Ready: `GET /readyz`
+- MCP: `POST /mcp` with `Authorization: Bearer bn_agent_...`
 
-### Client snippet (Claude / Codex)
+### Client snippet
 
 ```json
 {
@@ -52,42 +55,28 @@ npm run dev
 
 ## Tools (v0.1)
 
-| Tool | Backend (existing Admin API) |
+| Tool | Backend |
 |------|---------|
-| `bottlenote_whisky_search` | `GET /admin/api/v1/alcohols` |
-| `bottlenote_whisky_get` | `GET /admin/api/v1/alcohols/{id}` |
+| `bottlenote_whisky_search` | `GET /alcohols` |
+| `bottlenote_whisky_get` | `GET /alcohols/{id}` |
 
-No dedicated backend `/mcp/*` endpoints. MCP maps/reduces fields for agents.
-Never exposed: delete, bulk, free-form proxy, token minting tools.
+Failures return MCP `isError: true` (no stack/token leakage).
 
+## Security (must)
+
+1. Client credential = **Agent Key only** (JWT-shaped Bearer → 401).
+2. Admin JWT stays in-process after `/auth/agent` exchange.
+3. Logs redact `bn_agent_*` / JWT.
+4. Outbound allowlist: method + path (see `src/policy/allowlist.ts`).
+5. `BOTTLENOTE_AGENT_KEY` **rejected in production**.
 
 ## Docker (multi-arch)
 
 ```bash
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -t ghcr.io/bottle-note/mcp:0.1.0 \
-  --push .
+docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/bottle-note/mcp:0.1.0 --push .
 ```
-
-Local:
-
-```bash
-docker build -t mcp:local .
-docker run --rm -p 3100:3100 \
-  -e ADMIN_API_BASE_URL=http://host.docker.internal:8080/admin/api/v1 \
-  mcp:local
-```
-
-## Security
-
-1. Clients send **Agent Key only** (never Admin JWT).
-2. Gateway exchanges key via `POST /admin/api/v1/auth/agent` and keeps JWT in memory for the request.
-3. Logs redact `bn_agent_*` and JWTs.
-4. Outbound paths allowlisted (`/auth/agent`, `/alcohols`, `/alcohols/{id}` only).
 
 ## Related
 
 - bottle-note/workspace#370
-- Agent Key exchange: #340
-- Audit actor model: #341
+- #340 Agent Key · #341 audit (future)

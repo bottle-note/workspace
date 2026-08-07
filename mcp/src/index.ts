@@ -7,7 +7,10 @@ import { createMcpServer } from "./server.js";
 import {
   agentKeyFingerprint,
   extractAgentKey,
+  rejectionMessage,
+  validateAgentKey,
 } from "./auth/agentKey.js";
+import { MCP_HTTP_METHODS } from "./policy/allowlist.js";
 import { logError, logInfo, redactSecrets } from "./logging/redact.js";
 
 async function main(): Promise<void> {
@@ -22,37 +25,48 @@ async function main(): Promise<void> {
     res.status(200).json({ status: "ok", service: "mcp" });
   });
 
+  // Process is ready to accept traffic (no sticky session / no warm Admin dependency).
   app.get("/readyz", (_req, res) => {
-    res.status(200).json({ status: "ready", service: "mcp" });
+    res.status(200).json({ status: "ready", service: "mcp", nodeEnv: config.nodeEnv });
   });
 
   /**
-   * Stateless Streamable HTTP:
-   * - no sticky session requirement across pods
-   * - Agent Key from Authorization: Bearer bn_agent_*
-   * - Admin JWT never returned to client
+   * Stateless Streamable HTTP (P1):
+   * - no sticky session across pods
+   * - Agent Key only (P2); Admin JWT never returned
    */
   app.all(config.mcpPath, async (req, res) => {
     const correlationId = (req.header("x-correlation-id") ?? randomUUID()).toString();
     res.setHeader("x-correlation-id", correlationId);
 
-    const agentKey = extractAgentKey(
-      req.header("authorization") ?? undefined,
-      config.defaultAgentKey,
-    );
-    if (!agentKey) {
-      res.status(401).json({
-        error: "unauthorized",
-        message: "Missing Agent Key (Authorization: Bearer bn_agent_*)",
+    if (!MCP_HTTP_METHODS.has(req.method.toUpperCase())) {
+      res.status(405).json({
+        error: "method_not_allowed",
+        message: `Method ${req.method} not allowed on MCP endpoint`,
         correlationId,
       });
       return;
     }
 
+    const rawKey = extractAgentKey(
+      req.header("authorization") ?? undefined,
+      config.defaultAgentKey,
+    );
+    const validated = validateAgentKey(rawKey);
+    if (!validated.ok) {
+      res.status(401).json({
+        error: "unauthorized",
+        message: rejectionMessage(validated.reason),
+        correlationId,
+      });
+      return;
+    }
+    const agentKey = validated.key;
+
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // stateless
+      sessionIdGenerator: undefined,
     });
-    const server = createMcpServer(client, agentKey);
+    const server = createMcpServer(client, agentKey, { correlationId });
 
     try {
       await server.connect(transport);
@@ -76,23 +90,35 @@ async function main(): Promise<void> {
       try {
         await transport.close();
       } catch {
-        // ignore close races
+        // ignore
       }
       try {
         await server.close();
       } catch {
-        // ignore close races
+        // ignore
       }
     }
   });
 
-  app.listen(config.port, () => {
+  const server = app.listen(config.port, () => {
     logInfo("mcp listening", {
       port: config.port,
       mcpPath: config.mcpPath,
+      // host only — no secrets
       adminApiBaseUrl: config.adminApiBaseUrl,
+      nodeEnv: config.nodeEnv,
     });
   });
+
+  const shutdown = (signal: string) => {
+    logInfo("shutdown", { signal });
+    server.close(() => {
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10_000).unref();
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 main().catch((err) => {

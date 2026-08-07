@@ -1,5 +1,6 @@
 import type { AppConfig } from "../config.js";
 import { assertAgentKeyShape } from "../auth/agentKey.js";
+import { assertOutboundAllowed } from "../policy/allowlist.js";
 import { logError, logInfo, redactSecrets } from "../logging/redact.js";
 
 export type TokenItem = {
@@ -14,7 +15,6 @@ type GlobalResponseEnvelope<T> = {
   meta?: Record<string, unknown>;
 };
 
-/** Existing Admin alcohol list item fields (subset). */
 type AdminAlcoholItem = {
   alcoholId: number;
   korName?: string | null;
@@ -77,31 +77,40 @@ export type McpWhiskySearchResult = {
   hasNext: boolean | null;
 };
 
+export type RequestContext = {
+  correlationId?: string;
+};
+
 /**
- * Outbound client: MCP process -> existing Admin API only.
- * No dedicated /mcp/* backend endpoints.
+ * Outbound client: MCP → existing Admin API only (P5 isolation).
  */
 export class AdminBackendClient {
   constructor(private readonly config: AppConfig) {}
 
-  async exchangeAgentKey(agentKey: string): Promise<TokenItem> {
+  async exchangeAgentKey(
+    agentKey: string,
+    ctx: RequestContext = {},
+  ): Promise<TokenItem> {
     assertAgentKeyShape(agentKey);
     const body = await this.requestJson<GlobalResponseEnvelope<TokenItem>>(
       "POST",
       "/auth/agent",
       { agentKey },
       undefined,
+      ctx,
     );
     const token = body.data;
     if (!token?.accessToken) {
       throw new Error("Agent login response missing accessToken");
     }
-    return token;
+    // Never surface refreshToken to tool layer.
+    return { accessToken: token.accessToken };
   }
 
   async searchWhiskies(
     accessToken: string,
     params: { keyword?: string; page?: number; size?: number; regionId?: number },
+    ctx: RequestContext = {},
   ): Promise<McpWhiskySearchResult> {
     const page = params.page ?? 0;
     const size = Math.min(params.size ?? 20, 50);
@@ -111,20 +120,19 @@ export class AdminBackendClient {
     query.set("page", String(page));
     query.set("size", String(size));
 
-    // Existing Admin UI contract: GET /alcohols (fromPage → data list + meta)
     const body = await this.requestJson<GlobalResponseEnvelope<AdminAlcoholItem[]>>(
       "GET",
       `/alcohols?${query.toString()}`,
       undefined,
       accessToken,
+      ctx,
     );
 
     const rows = Array.isArray(body.data) ? body.data : [];
     const meta = body.meta ?? {};
     const totalElements =
       typeof meta.totalElements === "number" ? meta.totalElements : null;
-    const hasNext =
-      typeof meta.hasNext === "boolean" ? meta.hasNext : null;
+    const hasNext = typeof meta.hasNext === "boolean" ? meta.hasNext : null;
 
     return {
       items: rows.map((row) => ({
@@ -142,12 +150,17 @@ export class AdminBackendClient {
     };
   }
 
-  async getWhisky(accessToken: string, alcoholId: number): Promise<McpWhiskyDetail> {
+  async getWhisky(
+    accessToken: string,
+    alcoholId: number,
+    ctx: RequestContext = {},
+  ): Promise<McpWhiskyDetail> {
     const body = await this.requestJson<GlobalResponseEnvelope<AdminAlcoholDetail>>(
       "GET",
       `/alcohols/${alcoholId}`,
       undefined,
       accessToken,
+      ctx,
     );
     const d = body.data;
     if (!d) {
@@ -164,7 +177,7 @@ export class AdminBackendClient {
       age: d.age ?? null,
       cask: d.cask ?? null,
       volume: d.volume ?? null,
-      description: d.description ?? null,
+      description: truncate(d.description ?? null, this.config.maxDescriptionChars),
       regionId: d.regionId ?? null,
       korRegion: d.korRegion ?? null,
       engRegion: d.engRegion ?? null,
@@ -184,17 +197,9 @@ export class AdminBackendClient {
     path: string,
     jsonBody: unknown | undefined,
     accessToken: string | undefined,
+    ctx: RequestContext,
   ): Promise<T> {
-    // Allowlist: agent login + existing alcohol read APIs only.
-    const pathOnly = path.split("?")[0] ?? path;
-    const allowed =
-      pathOnly === "/auth/agent" ||
-      pathOnly === "/alcohols" ||
-      /^\/alcohols\/\d+$/.test(pathOnly);
-    if (!allowed) {
-      throw new Error(`Outbound path not allowlisted: ${pathOnly}`);
-    }
-
+    const pathOnly = assertOutboundAllowed(method, path);
     const url = `${this.config.adminApiBaseUrl}${path}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.adminApiTimeoutMs);
@@ -202,6 +207,9 @@ export class AdminBackendClient {
     const headers: Record<string, string> = {
       Accept: "application/json",
     };
+    if (ctx.correlationId) {
+      headers["x-correlation-id"] = ctx.correlationId;
+    }
     if (jsonBody !== undefined) {
       headers["Content-Type"] = "application/json";
     }
@@ -224,6 +232,7 @@ export class AdminBackendClient {
         path: pathOnly,
         status: response.status,
         durationMs,
+        correlationId: ctx.correlationId,
       });
 
       if (!response.ok) {
@@ -242,4 +251,10 @@ export class AdminBackendClient {
       clearTimeout(timer);
     }
   }
+}
+
+function truncate(value: string | null, max: number): string | null {
+  if (value == null) return null;
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}…`;
 }
