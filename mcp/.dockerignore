@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+git.environment-variables
+.env
+.env.*
+*.md
+.DS_Store
+coverage

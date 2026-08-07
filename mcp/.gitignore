@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# build
+dist/
+*.tsbuildinfo
+coverage/
+.turbo/
+
+# secrets / local env (never commit)
+.env
+.env.*
+!.env.example
+
+# private config submodule / secrets (if checked out locally)
+git.environment-variables/
+**/*.sops.yaml
+**/*.sops.env
+**/kubeconfig*
+**/*credentials*
+**/*secret*
+
+# logs / OS / IDE
+*.log
+.DS_Store
+.idea/
+.vscode/
