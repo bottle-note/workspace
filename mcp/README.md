@@ -11,9 +11,12 @@ Admin / Agent client (Claude, Codex, Cursor)
         |  internal HTTP only (allowlisted paths)
         |  Agent Key -> Admin JWT exchange (JWT never returned to client)
         v
- bottlenote-admin-api  MCP-optimized APIs
-   /admin/api/v1/mcp/...
+ bottlenote-admin-api  (existing APIs only)
+   POST /admin/api/v1/auth/agent
+   GET  /admin/api/v1/alcohols
+   GET  /admin/api/v1/alcohols/{id}
 ```
+
 
 ## Prerequisites
 
@@ -49,12 +52,14 @@ npm run dev
 
 ## Tools (v0.1)
 
-| Tool | Backend |
+| Tool | Backend (existing Admin API) |
 |------|---------|
-| `bottlenote_whisky_search` | `GET /admin/api/v1/mcp/whiskies` |
-| `bottlenote_whisky_get` | `GET /admin/api/v1/mcp/whiskies/{id}` |
+| `bottlenote_whisky_search` | `GET /admin/api/v1/alcohols` |
+| `bottlenote_whisky_get` | `GET /admin/api/v1/alcohols/{id}` |
 
+No dedicated backend `/mcp/*` endpoints. MCP maps/reduces fields for agents.
 Never exposed: delete, bulk, free-form proxy, token minting tools.
+
 
 ## Docker (multi-arch)
 
@@ -79,7 +84,7 @@ docker run --rm -p 3100:3100 \
 1. Clients send **Agent Key only** (never Admin JWT).
 2. Gateway exchanges key via `POST /admin/api/v1/auth/agent` and keeps JWT in memory for the request.
 3. Logs redact `bn_agent_*` and JWTs.
-4. Outbound paths allowlisted (`/auth/agent`, `/mcp/*` only).
+4. Outbound paths allowlisted (`/auth/agent`, `/alcohols`, `/alcohols/{id}` only).
 
 ## Related
 

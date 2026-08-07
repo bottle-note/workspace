@@ -11,7 +11,38 @@ type GlobalResponseEnvelope<T> = {
   success?: boolean;
   data?: T;
   errors?: unknown;
-  meta?: unknown;
+  meta?: Record<string, unknown>;
+};
+
+/** Existing Admin alcohol list item fields (subset). */
+type AdminAlcoholItem = {
+  alcoholId: number;
+  korName?: string | null;
+  engName?: string | null;
+  korCategoryName?: string | null;
+  engCategoryName?: string | null;
+  imageUrl?: string | null;
+};
+
+type AdminAlcoholDetail = {
+  alcoholId: number;
+  korName?: string | null;
+  engName?: string | null;
+  korCategory?: string | null;
+  engCategory?: string | null;
+  imageUrl?: string | null;
+  abv?: string | null;
+  age?: string | null;
+  cask?: string | null;
+  volume?: string | null;
+  description?: string | null;
+  regionId?: number | null;
+  korRegion?: string | null;
+  engRegion?: string | null;
+  distilleryId?: number | null;
+  korDistillery?: string | null;
+  engDistillery?: string | null;
+  tastingTags?: Array<{ id: number; korName?: string | null; engName?: string | null }>;
 };
 
 export type McpWhiskySummary = {
@@ -47,8 +78,8 @@ export type McpWhiskySearchResult = {
 };
 
 /**
- * Outbound client: MCP process -> Admin backend only.
- * Allowlist is enforced by calling fixed path builders (no free-form URL proxy).
+ * Outbound client: MCP process -> existing Admin API only.
+ * No dedicated /mcp/* backend endpoints.
  */
 export class AdminBackendClient {
   constructor(private readonly config: AppConfig) {}
@@ -72,35 +103,80 @@ export class AdminBackendClient {
     accessToken: string,
     params: { keyword?: string; page?: number; size?: number; regionId?: number },
   ): Promise<McpWhiskySearchResult> {
+    const page = params.page ?? 0;
+    const size = Math.min(params.size ?? 20, 50);
     const query = new URLSearchParams();
     if (params.keyword) query.set("keyword", params.keyword);
     if (params.regionId != null) query.set("regionId", String(params.regionId));
-    query.set("page", String(params.page ?? 0));
-    query.set("size", String(Math.min(params.size ?? 20, 50)));
+    query.set("page", String(page));
+    query.set("size", String(size));
 
-    const body = await this.requestJson<GlobalResponseEnvelope<McpWhiskySearchResult>>(
+    // Existing Admin UI contract: GET /alcohols (fromPage → data list + meta)
+    const body = await this.requestJson<GlobalResponseEnvelope<AdminAlcoholItem[]>>(
       "GET",
-      `/mcp/whiskies?${query.toString()}`,
+      `/alcohols?${query.toString()}`,
       undefined,
       accessToken,
     );
-    if (!body.data) {
-      throw new Error("MCP whisky search returned empty data");
-    }
-    return body.data;
+
+    const rows = Array.isArray(body.data) ? body.data : [];
+    const meta = body.meta ?? {};
+    const totalElements =
+      typeof meta.totalElements === "number" ? meta.totalElements : null;
+    const hasNext =
+      typeof meta.hasNext === "boolean" ? meta.hasNext : null;
+
+    return {
+      items: rows.map((row) => ({
+        alcoholId: row.alcoholId,
+        korName: row.korName ?? null,
+        engName: row.engName ?? null,
+        korCategory: row.korCategoryName ?? null,
+        engCategory: row.engCategoryName ?? null,
+        imageUrl: row.imageUrl ?? null,
+      })),
+      page,
+      size,
+      totalElements,
+      hasNext,
+    };
   }
 
   async getWhisky(accessToken: string, alcoholId: number): Promise<McpWhiskyDetail> {
-    const body = await this.requestJson<GlobalResponseEnvelope<McpWhiskyDetail>>(
+    const body = await this.requestJson<GlobalResponseEnvelope<AdminAlcoholDetail>>(
       "GET",
-      `/mcp/whiskies/${alcoholId}`,
+      `/alcohols/${alcoholId}`,
       undefined,
       accessToken,
     );
-    if (!body.data) {
-      throw new Error("MCP whisky detail returned empty data");
+    const d = body.data;
+    if (!d) {
+      throw new Error("Whisky detail returned empty data");
     }
-    return body.data;
+    return {
+      alcoholId: d.alcoholId,
+      korName: d.korName ?? null,
+      engName: d.engName ?? null,
+      korCategory: d.korCategory ?? null,
+      engCategory: d.engCategory ?? null,
+      imageUrl: d.imageUrl ?? null,
+      abv: d.abv ?? null,
+      age: d.age ?? null,
+      cask: d.cask ?? null,
+      volume: d.volume ?? null,
+      description: d.description ?? null,
+      regionId: d.regionId ?? null,
+      korRegion: d.korRegion ?? null,
+      engRegion: d.engRegion ?? null,
+      distilleryId: d.distilleryId ?? null,
+      korDistillery: d.korDistillery ?? null,
+      engDistillery: d.engDistillery ?? null,
+      tastingTags: (d.tastingTags ?? []).map((t) => ({
+        id: t.id,
+        korName: t.korName ?? null,
+        engName: t.engName ?? null,
+      })),
+    };
   }
 
   private async requestJson<T>(
@@ -109,9 +185,14 @@ export class AdminBackendClient {
     jsonBody: unknown | undefined,
     accessToken: string | undefined,
   ): Promise<T> {
-    // Path must stay under fixed allowlist prefixes.
-    if (!path.startsWith("/auth/agent") && !path.startsWith("/mcp/")) {
-      throw new Error(`Outbound path not allowlisted: ${path}`);
+    // Allowlist: agent login + existing alcohol read APIs only.
+    const pathOnly = path.split("?")[0] ?? path;
+    const allowed =
+      pathOnly === "/auth/agent" ||
+      pathOnly === "/alcohols" ||
+      /^\/alcohols\/\d+$/.test(pathOnly);
+    if (!allowed) {
+      throw new Error(`Outbound path not allowlisted: ${pathOnly}`);
     }
 
     const url = `${this.config.adminApiBaseUrl}${path}`;
@@ -140,14 +221,14 @@ export class AdminBackendClient {
       const durationMs = Date.now() - started;
       logInfo("admin_backend_call", {
         method,
-        path: path.split("?")[0],
+        path: pathOnly,
         status: response.status,
         durationMs,
       });
 
       if (!response.ok) {
         throw new Error(
-          `Admin API ${method} ${path.split("?")[0]} failed: ${response.status} ${redactSecrets(text)}`,
+          `Admin API ${method} ${pathOnly} failed: ${response.status} ${redactSecrets(text)}`,
         );
       }
       if (!text) {
